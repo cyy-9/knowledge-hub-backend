@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import { SKILL_LIMITS } from './constants/skill-limits';
 import type { ScriptRunResult } from './interfaces/script-run-result.interface';
 import type { SkillWorkspace } from './interfaces/skill-workspace.interface';
@@ -16,10 +16,10 @@ const DOCKER_BIN_CANDIDATES = [
 ];
 
 /**
- * Skill 脚本执行器（Phase 1）
+ * Skill 脚本执行器
  *
- * 在受限制的 Docker 容器中执行 scripts/*.js；
- * 开发环境可通过 SKILL_SCRIPT_USE_DOCKER=false 降级为本地 node（不推荐生产）。
+ * 默认在 backend 进程内以 node 子进程执行 scripts/*.js（仅 JavaScript）；
+ * 可选 SKILL_SCRIPT_USE_DOCKER=true 走 Docker 沙箱（需额外部署配置）。
  */
 @Injectable()
 export class SkillScriptRunnerService {
@@ -55,8 +55,12 @@ export class SkillScriptRunnerService {
       );
     }
 
+    if (!scriptPath.endsWith('.js')) {
+      throw new Error(`仅支持执行 JavaScript（.js）脚本：${scriptPath}`);
+    }
+
     const useDocker =
-      this.configService.get<string>('SKILL_SCRIPT_USE_DOCKER', 'true') ===
+      this.configService.get<string>('SKILL_SCRIPT_USE_DOCKER', 'false') ===
       'true';
 
     this.activeRuns += 1;
@@ -193,17 +197,41 @@ export class SkillScriptRunnerService {
     scriptPath: string,
     args: string[],
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-    this.logger.warn(
-      `使用本地 node 执行脚本（非 Docker 隔离）：${scriptPath}`,
+    const absoluteScript = this.resolveLocalScriptPath(workspace, scriptPath);
+
+    this.logger.log(
+      `本地执行 JS 脚本：${scriptPath}（args=${args.length}，cwd=${workspace.rootPath}）`,
     );
 
-    const absoluteScript = join(workspace.rootPath, scriptPath);
     return this.spawnProcess(
       'node',
       [absoluteScript, ...args],
       this.resolveTimeoutMs(),
-      workspace.rootPath,
+      resolve(workspace.rootPath),
     );
+  }
+
+  /** spawn 前：路径必须在 workspace 内且为 .js */
+  private resolveLocalScriptPath(
+    workspace: SkillWorkspace,
+    scriptPath: string,
+  ): string {
+    if (!scriptPath.endsWith('.js')) {
+      throw new Error(`仅支持执行 JavaScript（.js）脚本：${scriptPath}`);
+    }
+
+    const workspaceRoot = resolve(workspace.rootPath);
+    const absoluteScript = resolve(workspaceRoot, scriptPath);
+
+    if (
+      absoluteScript !== workspaceRoot &&
+      !absoluteScript.startsWith(`${workspaceRoot}/`)
+    ) {
+      throw new Error(`脚本路径越界：${scriptPath}`);
+    }
+
+    accessSync(absoluteScript, constants.R_OK);
+    return absoluteScript;
   }
 
   private spawnProcess(
@@ -215,6 +243,7 @@ export class SkillScriptRunnerService {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         cwd,
+        shell: false,
         env: {
           NODE_ENV: 'production',
         },

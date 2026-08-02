@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { BizCode } from '../../common/constants/biz-code.enum';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { SKILL_LIMITS } from './constants/skill-limits';
+import {
+  JS_SCRIPT_PATH_PATTERN,
+  NON_JS_SCRIPT_IN_SCRIPTS_PATTERN,
+} from './constants/skill-script-rules';
 
 @Injectable()
 export class SkillFilesService {
@@ -77,11 +81,23 @@ export class SkillFilesService {
     );
   }
 
-  /** 列出 Skill 中 scripts/ 目录下的 .js 脚本路径 */
+  /** 列出 Skill 中 scripts/ 目录下可执行的 .js 脚本（唯一允许执行的类型） */
   listScriptPaths(files: Record<string, string>): string[] {
     return Object.keys(files)
-      .filter((path) => this.isScriptPath(path))
+      .filter((path) => this.isJsScriptPath(path))
       .sort();
+  }
+
+  /** scripts/ 下不可执行的非 .js 文件（如 .py / .sh，仅作参考） */
+  listNonJsScriptsDirFiles(files: Record<string, string>): string[] {
+    return Object.keys(files)
+      .filter((path) => NON_JS_SCRIPT_IN_SCRIPTS_PATTERN.test(path))
+      .sort();
+  }
+
+  /** 是否为 scripts/ 下可执行的 JavaScript 脚本路径 */
+  isJsScriptPath(path: string): boolean {
+    return JS_SCRIPT_PATH_PATTERN.test(path);
   }
 
   /** 是否有可执行脚本（决定是否注册 run_script tool） */
@@ -103,10 +119,10 @@ export class SkillFilesService {
       );
     }
 
-    if (!this.isScriptPath(normalized)) {
+    if (!this.isJsScriptPath(normalized)) {
       throw new BusinessException(
         BizCode.SKILL_PAYLOAD_INVALID,
-        `仅允许执行 scripts/ 目录下的 .js 文件：${path}`,
+        `仅允许执行 scripts/ 目录下的 JavaScript（.js）脚本：${path}`,
       );
     }
 
@@ -116,10 +132,6 @@ export class SkillFilesService {
         `脚本不存在：${path}`,
       );
     }
-  }
-
-  private isScriptPath(path: string): boolean {
-    return /\/scripts\/[^/]+\.js$/.test(path) || /^scripts\/[^/]+\.js$/.test(path);
   }
 
   private normalizePath(path: string): string {

@@ -60,10 +60,30 @@ export class SkillTrialService implements OnModuleInit {
       );
     }
 
-    // Phase 1：为本次试用创建临时工作区，供 Docker 只读挂载
+    // 创建临时工作区（写盘供 node 子进程读取脚本）
     const workspace = await this.workspaceService.create(files);
 
     try {
+      // Layer 1：试用入口预检全部 scripts/*.js（仅 JavaScript 可执行）
+      if (this.skillFilesService.hasScripts(files) && this.scriptRunner.isEnabled()) {
+        const precheck = this.scriptValidator.validateAllScripts(files);
+        if (!precheck.safe) {
+          const firstError =
+            precheck.issues.find((issue) => issue.level === 'error')?.message ??
+            '脚本未通过安全校验';
+          throw new BusinessException(BizCode.SKILL_SCRIPT_UNSAFE, firstError);
+        }
+
+        if (precheck.issues.some((issue) => issue.level === 'warning')) {
+          this.logger.warn(
+            `Skill 脚本预检存在警告：${precheck.issues
+              .filter((issue) => issue.level === 'warning')
+              .map((issue) => issue.message)
+              .join('；')}`,
+          );
+        }
+      }
+
       const enableThinking =
         this.configService.get<string>('SKILL_TRIAL_ENABLE_THINKING', 'false') ===
         'true';

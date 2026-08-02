@@ -16,15 +16,25 @@ export const SKILL_LIMITS = {
     '.gitkeep',
   ]),
 
-  /** scripts/ 下 .js 脚本执行限制（Docker 沙箱） */
+  /** scripts/ 下 .js 脚本执行限制（仅支持 JavaScript） */
   script: {
+    /** 可执行脚本扩展名（唯一） */
+    executableExtension: '.js',
     /** 单次脚本执行超时（毫秒） */
     timeoutMs: 10_000,
     /** stdout + stderr 合计最大字节数 */
     maxOutputBytes: 65_536,
-    /** 同时运行的脚本容器上限 */
+    /** 同时运行的脚本进程上限 */
     maxConcurrentRuns: 5,
     /** agent loop 最大步数（含 tool 调用轮次） */
     maxTrialSteps: 5,
+    /** 单脚本最大字节数（执行前校验） */
+    maxScriptBytes: 32 * 1024,
+    /** 单脚本最大行数 */
+    maxScriptLines: 200,
+    /** CLI 参数最大个数 */
+    maxArgs: 10,
+    /** 单个 CLI 参数最大字节数 */
+    maxArgBytes: 8 * 1024,
   },
 } as const;

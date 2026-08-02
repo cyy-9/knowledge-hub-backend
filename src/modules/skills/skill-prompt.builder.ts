@@ -23,11 +23,17 @@ export class SkillPromptBuilder {
       description?.trim() || '（未提供 description，请谨慎判断是否启用）';
 
     const scriptPaths = this.skillFilesService.listScriptPaths(files);
+    const nonJsScripts = this.skillFilesService.listNonJsScriptsDirFiles(files);
     const referenceIndex = Object.keys(files)
       .filter((path) => path !== skillMdPath && !path.endsWith('/.gitkeep'))
       .map((path) => {
-        const tag = scriptPaths.includes(path) ? ' [可执行脚本]' : '';
-        return `- ${path}${tag}`;
+        if (scriptPaths.includes(path)) {
+          return `- ${path} [可执行 JS 脚本]`;
+        }
+        if (nonJsScripts.includes(path)) {
+          return `- ${path} [scripts/ 内不可执行，仅参考]`;
+        }
+        return `- ${path}`;
       })
       .join('\n');
 
@@ -38,10 +44,11 @@ export class SkillPromptBuilder {
     // Phase 2：有脚本时提示 AI 通过 run_script tool 执行，用法见 SKILL.md 正文
     const scriptToolHint = scriptPaths.length
       ? `\n\n<script_execution>
-本 Skill 含 JavaScript 脚本（${scriptPaths.join('、')}）。
+本 Skill 含可执行 JavaScript 脚本（${scriptPaths.join('、')}）。
+- 仅 scripts/ 下的 .js 文件可通过 run_script 执行；.py / .sh 等仅作参考，不可执行。
 - 何时调用哪个脚本、传什么参数、如何解读输出：见下方 SKILL.md 正文说明，勿臆造。
-- 启用 Skill 且任务确实需要脚本时，使用 run_script tool 执行；不需要脚本时勿调用。
-- 脚本在隔离 Docker 容器中运行，无网络、无文件系统写入。
+- 启用 Skill 且任务确实需要脚本时，使用 run_script tool；不需要脚本时勿调用。
+- 脚本在受控 Node 子进程中运行（非 Docker 容器隔离），已通过静态安全校验。
 </script_execution>`
       : '';
 
