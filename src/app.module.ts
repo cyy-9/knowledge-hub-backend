@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DocumentModule } from './modules/document/document.module';
@@ -15,6 +16,8 @@ import { UserModule } from './modules/user/user.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { ImageProcessModule } from './modules/image-process/image-process.module';
+import { DocumentQueueModule } from './modules/document-queue/document-queue.module';
+import { SkillsModule } from './modules/skills/skills.module';
 
 @Module({
   imports: [
@@ -61,12 +64,45 @@ import { ImageProcessModule } from './modules/image-process/image-process.module
         };
       },
     }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST', '127.0.0.1'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          password: configService.get<string>('REDIS_PASSWORD') || undefined,
+          db: configService.get<number>('REDIS_DB', 0),
+        },
+        // BullMQ 在 Redis 中生成的键前缀
+        prefix: 'knowledge-hub-bullmq',
+        // 所有队列的默认任务配置
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 3000,
+          },
+          // 成功任务保留最近 1000 条或最多 24 小时
+          removeOnComplete: {
+            age: 24 * 60 * 60,
+            count: 1000,
+          },
+          // 失败任务保留最近 5000 条或最多 7 天
+          removeOnFail: {
+            age: 7 * 24 * 60 * 60,
+            count: 5000,
+          },
+        },
+      }),
+    }),
     DocumentModule,
     StorageModule,
     RedisModule,
     UserModule,
     AuthModule,
     ImageProcessModule,
+    DocumentQueueModule,
+    SkillsModule,
   ],
   controllers: [AppController],
   providers: [

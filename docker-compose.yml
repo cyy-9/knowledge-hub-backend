@@ -82,6 +82,15 @@ services:
       timeout: 5s
       retries: 5
 
+  # Skill Playground 脚本沙箱（Phase 1）
+  # 构建：docker compose build skill-sandbox-node
+  skill-sandbox-node:
+    build:
+      context: ./docker/skill-sandbox-node
+    image: skill-sandbox-node:latest
+    profiles:
+      - skill-sandbox
+
 networks:
   default:
     name: common-network

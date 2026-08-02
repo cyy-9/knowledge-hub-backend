@@ -36,3 +36,12 @@ curl -s -X POST http://localhost:3001/documents/upload/parse \
   -F 'file=@./test-files/申论总结课.pptx' \
   -F 'authorId=10001' \
   -F 'createBy=10001'
+
+curl -X POST http://localhost:3001/document-queue/vectorize \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "documentId": "doc-002",
+    "fileKey": "uploads/test.pdf",
+    "knowledgeBaseId": "kb-001",
+    "version": 1
+  }'
